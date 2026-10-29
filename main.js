@@ -117,13 +117,13 @@ function wrap(fn) {
 }
 
 ipcMain.handle('scan:all', wrap((url, opts) => scanners.scanAll(url, opts || {})));
-ipcMain.handle('scan:headers', wrap((url) => scanners.scanHeaders(url)));
-ipcMain.handle('scan:tls', wrap((url) => scanners.scanTls(url)));
+ipcMain.handle('scan:headers', wrap((url, opts) => scanners.scanHeaders(url, opts || {})));
+ipcMain.handle('scan:tls', wrap((url, opts) => scanners.scanTls(url, opts || {})));
 ipcMain.handle('scan:xss', wrap((url, opts) => scanners.scanXss(url, opts || {})));
-ipcMain.handle('scan:exposed', wrap((url) => scanners.scanExposedFiles(url)));
-ipcMain.handle('scan:cookies', wrap((url) => scanners.scanCookies(url)));
+ipcMain.handle('scan:exposed', wrap((url, opts) => scanners.scanExposedFiles(url, opts || {})));
+ipcMain.handle('scan:cookies', wrap((url, opts) => scanners.scanCookies(url, opts || {})));
 ipcMain.handle('scan:sqli', wrap((url, opts) => scanners.scanSqlInjection(url, opts || {})));
-ipcMain.handle('scan:ports', wrap((url) => scanners.scanPorts(url)));
+ipcMain.handle('scan:ports', wrap((url, opts) => scanners.scanPorts(url, opts || {})));
 ipcMain.handle('scan:admin', wrap((url, opts) => scanners.scanAdmin(url, opts || {})));
 ipcMain.handle('scan:fingerprint', wrap((url, opts) => scanners.scanFingerprint(url, opts || {})));
 

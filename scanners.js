@@ -9,6 +9,8 @@ const https = require('https');
 const tls = require('tls');
 const net = require('net');
 const { URL } = require('url');
+const i18n = require('./i18n');
+function tr(ru, en) { return i18n.tr(ru, en); }
 
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -35,12 +37,23 @@ function setHttpClient(fn) {
 }
 
 const SEVERITY = {
-  critical: { rank: 4, label: 'Критическая' },
-  high: { rank: 3, label: 'Высокая' },
-  medium: { rank: 2, label: 'Средняя' },
-  low: { rank: 1, label: 'Низкая' },
-  info: { rank: 0, label: 'Информация' },
+  critical: { rank: 4, get label() { return getSeverityLabel('critical'); } },
+  high: { rank: 3, get label() { return getSeverityLabel('high'); } },
+  medium: { rank: 2, get label() { return getSeverityLabel('medium'); } },
+  low: { rank: 1, get label() { return getSeverityLabel('low'); } },
+  info: { rank: 0, get label() { return getSeverityLabel('info'); } },
 };
+
+function getSeverityLabel(sev) {
+  const labels = {
+    critical: tr('Критическая', 'Critical'),
+    high: tr('Высокая', 'High'),
+    medium: tr('Средняя', 'Medium'),
+    low: tr('Низкая', 'Low'),
+    info: tr('Информация', 'Info'),
+  };
+  return labels[sev] || sev;
+}
 
 function finding(severity, title, description, recommendation, extra) {
   const e = extra || {};
@@ -95,7 +108,7 @@ function nodeRawRequest(targetUrl, options = {}) {
     try {
       parsed = new URL(targetUrl);
     } catch (err) {
-      reject(new Error('Некорректный URL: ' + targetUrl));
+      reject(new Error(tr('Некорректный URL: ', 'Invalid URL: ') + targetUrl));
       return;
     }
 
@@ -163,7 +176,7 @@ function nodeRawRequest(targetUrl, options = {}) {
     });
 
     req.on('timeout', () => {
-      req.destroy(new Error('Превышено время ожидания'));
+      req.destroy(new Error(tr('Превышено время ожидания', 'Request timed out')));
     });
     req.on('error', (err) => reject(err));
     if (options.body) req.write(options.body);
@@ -175,7 +188,8 @@ function nodeRawRequest(targetUrl, options = {}) {
 // 1. Заголовки безопасности
 // ---------------------------------------------------------------------------
 
-async function scanHeaders(targetUrl) {
+async function scanHeaders(targetUrl, options = {}) {
+  if (options && options.lang) i18n.setLang(options.lang);
   const findings = [];
   const res = await rawRequest(targetUrl, { method: 'GET' });
   const h = res.headers;
@@ -187,9 +201,9 @@ async function scanHeaders(targetUrl) {
     findings.push(
       finding(
         'medium',
-        'Отсутствует Content-Security-Policy',
-        'CSP защищает от XSS и внедрения стороннего контента. Заголовок не найден.',
-        'Добавьте заголовок Content-Security-Policy с ограничением источников скриптов.'
+        tr('Отсутствует Content-Security-Policy', 'Content-Security-Policy is missing'),
+        tr('CSP защищает от XSS и внедрения стороннего контента. Заголовок не найден.', 'CSP protects against XSS and third-party content injection. The header was not found.'),
+        tr('Добавьте заголовок Content-Security-Policy с ограничением источников скриптов.', 'Add a Content-Security-Policy header restricting script sources.')
       )
     );
   }
@@ -198,9 +212,9 @@ async function scanHeaders(targetUrl) {
     findings.push(
       finding(
         'medium',
-        'Отсутствует HSTS',
-        'Strict-Transport-Security заставляет браузер всегда использовать HTTPS. Заголовок не найден.',
-        'Добавьте: Strict-Transport-Security: max-age=31536000; includeSubDomains.'
+        tr('Отсутствует HSTS', 'HSTS is missing'),
+        tr('Strict-Transport-Security заставляет браузер всегда использовать HTTPS. Заголовок не найден.', 'Strict-Transport-Security forces the browser to always use HTTPS. The header was not found.'),
+        tr('Добавьте: Strict-Transport-Security: max-age=31536000; includeSubDomains.', 'Add: Strict-Transport-Security: max-age=31536000; includeSubDomains.')
       )
     );
   }
@@ -212,9 +226,9 @@ async function scanHeaders(targetUrl) {
     findings.push(
       finding(
         'medium',
-        'Нет защиты от clickjacking',
-        'Нет ни X-Frame-Options, ни CSP frame-ancestors — страницу можно встроить в iframe злоумышленника.',
-        'Добавьте X-Frame-Options: DENY или CSP frame-ancestors.'
+        tr('Нет защиты от clickjacking', 'No clickjacking protection'),
+        tr('Нет ни X-Frame-Options, ни CSP frame-ancestors — страницу можно встроить в iframe злоумышленника.', 'Neither X-Frame-Options nor CSP frame-ancestors is set, so an attacker can embed the page in an iframe.'),
+        tr('Добавьте X-Frame-Options: DENY или CSP frame-ancestors.', 'Add X-Frame-Options: DENY or CSP frame-ancestors.')
       )
     );
   }
@@ -223,9 +237,9 @@ async function scanHeaders(targetUrl) {
     findings.push(
       finding(
         'low',
-        'Отсутствует X-Content-Type-Options',
-        'Браузер может угадывать MIME-тип, что повышает риск атак.',
-        'Добавьте X-Content-Type-Options: nosniff.'
+        tr('Отсутствует X-Content-Type-Options', 'X-Content-Type-Options is missing'),
+        tr('Браузер может угадывать MIME-тип, что повышает риск атак.', 'The browser may sniff the MIME type, increasing the risk of attacks.'),
+        tr('Добавьте X-Content-Type-Options: nosniff.', 'Add X-Content-Type-Options: nosniff.')
       )
     );
   }
@@ -234,9 +248,9 @@ async function scanHeaders(targetUrl) {
     findings.push(
       finding(
         'low',
-        'Отсутствует Referrer-Policy',
-        'Возможна утечка URL во внешние ресурсы через заголовок Referer.',
-        'Добавьте Referrer-Policy: no-referrer-when-downgrade или строже.'
+        tr('Отсутствует Referrer-Policy', 'Referrer-Policy is missing'),
+        tr('Возможна утечка URL во внешние ресурсы через заголовок Referer.', 'URLs may leak to external resources through the Referer header.'),
+        tr('Добавьте Referrer-Policy: no-referrer-when-downgrade или строже.', 'Add Referrer-Policy: no-referrer-when-downgrade or a stricter policy.')
       )
     );
   }
@@ -245,9 +259,9 @@ async function scanHeaders(targetUrl) {
     findings.push(
       finding(
         'info',
-        'Отсутствует Permissions-Policy',
-        'Нет ограничений на использование камеры, микрофона, геолокации и др.',
-        'Рассмотрите добавление Permissions-Policy.'
+        tr('Отсутствует Permissions-Policy', 'Permissions-Policy is missing'),
+        tr('Нет ограничений на использование камеры, микрофона, геолокации и др.', 'There are no restrictions on the use of the camera, microphone, geolocation, and other features.'),
+        tr('Рассмотрите добавление Permissions-Policy.', 'Consider adding a Permissions-Policy header.')
       )
     );
   }
@@ -260,9 +274,9 @@ async function scanHeaders(targetUrl) {
     findings.push(
       finding(
         'low',
-        'Раскрытие версий ПО',
-        'Сервер сообщает версии ПО: ' + discloser.join('; ') + '. Это помогает подбирать эксплойты.',
-        'Скройте или обобщите заголовки Server / X-Powered-By.'
+        tr('Раскрытие версий ПО', 'Software version disclosure'),
+        tr('Сервер сообщает версии ПО: ', 'The server discloses software versions: ') + discloser.join('; ') + tr('. Это помогает подбирать эксплойты.', '. This helps attackers select exploits.'),
+        tr('Скройте или обобщите заголовки Server / X-Powered-By.', 'Hide or generalize the Server / X-Powered-By headers.')
       )
     );
   }
@@ -272,16 +286,16 @@ async function scanHeaders(targetUrl) {
     findings.push(
       finding(
         'high',
-        'Опасная конфигурация CORS',
-        'Access-Control-Allow-Origin: * вместе с Allow-Credentials: true позволяет красть данные пользователя с любого сайта.',
-        'Не используйте wildcard ACAO вместе с credentials. Укажите конкретные домены.'
+        tr('Опасная конфигурация CORS', 'Dangerous CORS configuration'),
+        tr('Access-Control-Allow-Origin: * вместе с Allow-Credentials: true позволяет красть данные пользователя с любого сайта.', 'Access-Control-Allow-Origin: * together with Allow-Credentials: true can allow user data to be stolen from any site.'),
+        tr('Не используйте wildcard ACAO вместе с credentials. Укажите конкретные домены.', 'Do not use wildcard ACAO with credentials. Specify exact domains.')
       )
     );
   }
 
   if (!findings.length) {
     findings.push(
-      finding('info', 'Заголовки безопасности в порядке', 'Основные защитные заголовки присутствуют.', '')
+      finding('info', tr('Заголовки безопасности в порядке', 'Security headers are configured correctly'), tr('Основные защитные заголовки присутствуют.', 'The main security headers are present.'), '')
     );
   }
 
@@ -300,13 +314,14 @@ async function scanHeaders(targetUrl) {
 // 2. TLS / Сертификат
 // ---------------------------------------------------------------------------
 
-function scanTls(targetUrl) {
+function scanTls(targetUrl, options = {}) {
+  if (options && options.lang) i18n.setLang(options.lang);
   return new Promise((resolve) => {
     let parsed;
     try {
       parsed = new URL(targetUrl);
     } catch (err) {
-      resolve({ findings: [finding('info', 'Некорректный URL', String(err), '')], meta: {} });
+      resolve({ findings: [finding('info', tr('Некорректный URL', 'Invalid URL'), String(err), '')], meta: {} });
       return;
     }
 
@@ -315,9 +330,9 @@ function scanTls(targetUrl) {
         findings: [
           finding(
             'critical',
-            'Сайт работает по HTTP без шифрования',
-            'Трафик передаётся в открытом виде. Пароли, cookie и данные могут быть перехвачены.',
-            'Никогда не вводите пароли на таком сайте. Требуется HTTPS.'
+            tr('Сайт работает по HTTP без шифрования', 'The site uses unencrypted HTTP'),
+            tr('Трафик передаётся в открытом виде. Пароли, cookie и данные могут быть перехвачены.', 'Traffic is sent in plaintext. Passwords, cookies, and data can be intercepted.'),
+            tr('Никогда не вводите пароли на таком сайте. Требуется HTTPS.', 'Never enter passwords on this site. HTTPS is required.')
           ),
         ],
         meta: { protocol: 'http' },
@@ -344,10 +359,10 @@ function scanTls(targetUrl) {
           findings.push(
             finding(
               'critical',
-              'Недействительный TLS-сертификат',
-              'Сертификат не прошёл проверку: ' + (authError || 'неизвестная ошибка') +
-                '. Возможна атака «человек посередине» или самоподписанный сертификат.',
-              'Не доверяйте сайту с невалидным сертификатом.'
+              tr('Недействительный TLS-сертификат', 'Invalid TLS certificate'),
+              tr('Сертификат не прошёл проверку: ', 'Certificate validation failed: ') + (authError || tr('неизвестная ошибка', 'unknown error')) +
+                tr('. Возможна атака «человек посередине» или самоподписанный сертификат.', '. This may indicate a man-in-the-middle attack or a self-signed certificate.'),
+              tr('Не доверяйте сайту с невалидным сертификатом.', 'Do not trust a site with an invalid certificate.')
             )
           );
         }
@@ -359,18 +374,18 @@ function scanTls(targetUrl) {
             findings.push(
               finding(
                 'critical',
-                'Срок сертификата истёк',
-                'Сертификат истёк ' + Math.abs(daysLeft) + ' дн. назад (' + cert.valid_to + ').',
-                'Сайт не поддерживает безопасное соединение корректно.'
+                tr('Срок сертификата истёк', 'Certificate has expired'),
+                tr('Сертификат истёк ', 'The certificate expired ') + Math.abs(daysLeft) + tr(' дн. назад (', ' days ago (') + cert.valid_to + ').',
+                tr('Сайт не поддерживает безопасное соединение корректно.', 'The site does not properly support a secure connection.')
               )
             );
           } else if (daysLeft < 15) {
             findings.push(
               finding(
                 'medium',
-                'Сертификат скоро истечёт',
-                'Осталось ' + daysLeft + ' дн. (' + cert.valid_to + ').',
-                'Владельцу стоит обновить сертификат.'
+                tr('Сертификат скоро истечёт', 'Certificate expires soon'),
+                tr('Осталось ', '') + daysLeft + tr(' дн. (', ' days remaining (') + cert.valid_to + ').',
+                tr('Владельцу стоит обновить сертификат.', 'The owner should renew the certificate.')
               )
             );
           }
@@ -380,16 +395,16 @@ function scanTls(targetUrl) {
           findings.push(
             finding(
               'high',
-              'Устаревший протокол TLS',
-              'Используется ' + protocol + ', который считается небезопасным.',
-              'Отключите TLS 1.0/1.1, используйте TLS 1.2+.'
+              tr('Устаревший протокол TLS', 'Outdated TLS protocol'),
+              tr('Используется ', 'The site uses ') + protocol + tr(', который считается небезопасным.', ', which is considered insecure.'),
+              tr('Отключите TLS 1.0/1.1, используйте TLS 1.2+.', 'Disable TLS 1.0/1.1 and use TLS 1.2 or newer.')
             )
           );
         }
 
         if (!findings.length) {
           findings.push(
-            finding('info', 'TLS-сертификат в порядке', 'Соединение защищено валидным сертификатом (' + protocol + ').', '')
+            finding('info', tr('TLS-сертификат в порядке', 'TLS certificate is valid'), tr('Соединение защищено валидным сертификатом (', 'The connection is protected by a valid certificate (') + protocol + ').', '')
           );
         }
 
@@ -412,9 +427,9 @@ function scanTls(targetUrl) {
         findings: [
           finding(
             'high',
-            'Ошибка TLS-соединения',
-            'Не удалось установить защищённое соединение: ' + err.message,
-            'Проверьте доступность и конфигурацию TLS сайта.'
+            tr('Ошибка TLS-соединения', 'TLS connection error'),
+            tr('Не удалось установить защищённое соединение: ', 'Could not establish a secure connection: ') + err.message,
+            tr('Проверьте доступность и конфигурацию TLS сайта.', 'Check the site availability and TLS configuration.')
           ),
         ],
         meta: {},
@@ -423,7 +438,7 @@ function scanTls(targetUrl) {
     socket.on('timeout', () => {
       socket.destroy();
       resolve({
-        findings: [finding('medium', 'TLS: превышено время ожидания', 'Сервер не ответил вовремя.', '')],
+        findings: [finding('medium', tr('TLS: превышено время ожидания', 'TLS: request timed out'), tr('Сервер не ответил вовремя.', 'The server did not respond in time.'), '')],
         meta: {},
       });
     });
@@ -481,7 +496,7 @@ async function scanXssOne(targetUrl) {
   } else {
     const u = new URL(parsed.toString());
     u.searchParams.set('q', payload);
-    testUrls.push({ param: 'q (добавлен)', url: u.toString(), page: parsed.toString() });
+    testUrls.push({ param: tr('q (добавлен)', 'q (added)'), url: u.toString(), page: parsed.toString() });
   }
 
   let reflectedAny = false;
@@ -494,27 +509,27 @@ async function scanXssOne(targetUrl) {
         findings.push(
           finding(
             'high',
-            'Возможный отражённый XSS в параметре «' + t.param + '»',
-            'Страница: ' + t.page + '. Нагрузка вернулась без экранирования.',
-            'Экранируйте вывод пользовательских данных и добавьте Content-Security-Policy.',
+            tr('Возможный отражённый XSS в параметре «', 'Possible reflected XSS in parameter “') + t.param + tr('»', '”'),
+            tr('Страница: ', 'Page: ') + t.page + tr('. Нагрузка вернулась без экранирования.', '. The payload was returned without escaping.'),
+            tr('Экранируйте вывод пользовательских данных и добавьте Content-Security-Policy.', 'Escape user-controlled output and add a Content-Security-Policy.'),
             {
               module: 'xss',
               param: t.param,
               location: t.url,
               where:
-                'Страница «' +
+                tr('Страница «', 'Page “') +
                 t.page +
-                '», параметр «' +
+                tr('», параметр «', '”, parameter “') +
                 t.param +
-                '». Откройте: ' +
+                tr('». Откройте: ', '”. Open: ') +
                 t.url,
-              evidence: 'Неэкранированная тестовая нагрузка в HTML ответа',
-              risk: 'Кража cookie/сессии, подмена страницы.',
+              evidence: tr('Неэкранированная тестовая нагрузка в HTML ответа', 'Unescaped test payload in the HTML response'),
+              risk: tr('Кража cookie/сессии, подмена страницы.', 'Cookie/session theft and page manipulation.'),
               fixSteps: [
-                'Откройте страницу: ' + t.page,
-                'Найдите вывод параметра «' + t.param + '» в коде.',
-                'Экранируйте вывод (htmlspecialchars и аналоги).',
-                'Добавьте CSP и повторите проверку XSS.',
+                tr('Откройте страницу: ', 'Open the page: ') + t.page,
+                tr('Найдите вывод параметра «', 'Find where parameter “') + t.param + tr('» в коде.', '” is output in the code.'),
+                tr('Экранируйте вывод (htmlspecialchars и аналоги).', 'Escape the output (htmlspecialchars or equivalent).'),
+                tr('Добавьте CSP и повторите проверку XSS.', 'Add CSP and repeat the XSS check.'),
               ],
             }
           )
@@ -523,15 +538,15 @@ async function scanXssOne(targetUrl) {
         findings.push(
           finding(
             'info',
-            'Параметр «' + t.param + '» отражается (экранирован) на ' + parsed.pathname,
-            'Значение попадает на страницу, но экранируется.',
-            'Поддерживайте экранирование вывода.',
+            tr('Параметр «', 'Parameter “') + t.param + tr('» отражается (экранирован) на ', '” is reflected (escaped) on ') + parsed.pathname,
+            tr('Значение попадает на страницу, но экранируется.', 'The value reaches the page but is escaped.'),
+            tr('Поддерживайте экранирование вывода.', 'Keep output escaping enabled.'),
             {
               module: 'xss',
               param: t.param,
               location: t.page,
-              where: 'Страница ' + t.page + ', параметр «' + t.param + '»',
-              evidence: 'Отражение есть, экранирование работает',
+              where: tr('Страница ', 'Page ') + t.page + tr(', параметр «', ', parameter “') + t.param + tr('»', '”'),
+              evidence: tr('Отражение есть, экранирование работает', 'The value is reflected and escaping works'),
             }
           )
         );
@@ -545,6 +560,7 @@ async function scanXssOne(targetUrl) {
 }
 
 async function scanXss(targetUrl, options = {}) {
+  if (options && options.lang) i18n.setLang(options.lang);
   const pages = collectPages(targetUrl, options).slice(0, 12);
   const findings = [];
   let tested = 0;
@@ -564,13 +580,13 @@ async function scanXss(targetUrl, options = {}) {
     findings.push(
       finding(
         'info',
-        'Отражённый XSS не обнаружен',
-        'Проверено страниц: ' + pages.length + '. Неэкранированного отражения нет.',
+        tr('Отражённый XSS не обнаружен', 'No reflected XSS detected'),
+        tr('Проверено страниц: ', 'Pages checked: ') + pages.length + tr('. Неэкранированного отражения нет.', '. No unescaped reflection was found.'),
         '',
         {
           module: 'xss',
-          where: 'Просмотрены: ' + pages.slice(0, 5).join(' · ') + (pages.length > 5 ? ' …' : ''),
-          evidence: 'Тестов параметров: ' + tested,
+          where: tr('Просмотрены: ', 'Reviewed: ') + pages.slice(0, 5).join(' · ') + (pages.length > 5 ? ' …' : ''),
+          evidence: tr('Тестов параметров: ', 'Parameter tests: ') + tested,
         }
       )
     );
@@ -727,6 +743,27 @@ const SENSITIVE_PATHS = [
   },
 ];
 
+const SENSITIVE_TEXT_EN = {
+  '/.git/config': ['An exposed Git repository lets attackers download the site source code.', 'Source code, configuration passwords, and admin logic may leak.', ['Deny web access to the .git directory in Nginx/Apache.', 'Verify that https://YOUR_SITE/.git/config returns 403/404.', 'Do not keep .git in the public site directory (public_html / www).']],
+  '/.git/HEAD': ['An exposed Git repository (.git/HEAD).', 'Confirms that .git exists and the full source may be downloaded.', ['Block public access to the entire /.git/ directory.', 'Verify that /.git/HEAD returns 403 or 404.']],
+  '/.env': ['The .env file often contains database passwords, API keys, and secrets.', 'Direct access to databases, email, and payment keys.', ['Immediately rotate all passwords/keys in this file (DB, API, SMTP).', 'Remove .env from the public directory or deny access to it.', 'Verify that https://YOUR_SITE/.env is no longer accessible.']],
+  '/.env.local': ['A local .env file containing secrets.', 'Environment secrets may leak.', ['Block or remove the file from the web root.', 'Rotate compromised secrets.']],
+  '/config.php.bak': ['A configuration backup that may contain passwords.', '.bak files often contain plaintext database passwords.', ['Remove *.bak files from the public directory.', 'Rotate passwords if the file was accessible.']],
+  '/wp-config.php.bak': ['A wp-config backup containing WordPress database access.', 'Full access to the WordPress database.', ['Remove wp-config.php.bak from the server.', 'Rotate the WordPress database password.']],
+  '/backup.zip': ['An exposed site backup.', 'The archive may contain source code and configuration files.', ['Remove backup.zip from the web root or move it outside public storage.', 'Keep backups outside the site.']],
+  '/backup.sql': ['An exposed SQL database dump.', 'A full database copy containing users, passwords, and personal data.', ['URGENT: remove backup.sql from the server or block access.', 'Rotate user and administrator passwords.', 'Never place .sql files in the site directory.']],
+  '/database.sql': ['An exposed SQL database dump.', 'The entire database may leak.', ['Remove database.sql from public access.', 'Rotate passwords after the leak.']],
+  '/db.sql': ['An exposed SQL database dump.', 'The entire database may leak.', ['Remove db.sql.', 'Check for other *.sql files in the site root.']],
+  '/dump.sql': ['An exposed SQL database dump.', 'The entire database may leak.', ['Remove dump.sql from the web root.', 'Keep dumps only in protected backup storage.']],
+  '/.svn/entries': ['An exposed SVN repository.', 'Source code can be downloaded.', ['Block web access to the /.svn/ directory.']],
+  '/.DS_Store': ['The .DS_Store file reveals the directory structure.', 'It provides clues about hidden directories.', ['Remove .DS_Store from the server.']],
+  '/.htaccess': ['An Apache configuration file is accessible.', 'Protection rules and paths are exposed.', ['Block browser access to .htaccess (normally blocked by default; verify the configuration).']],
+  '/phpinfo.php': ['phpinfo() reveals the full server configuration.', 'Software versions, paths, and modules help attackers.', ['Remove phpinfo.php from production.', 'Do not leave test scripts on the site.']],
+  '/server-status': ['Apache server-status reveals traffic and requests.', 'Visitor URLs and server load are visible.', ['Disable external mod_status access or restrict it by IP.']],
+  '/.well-known/security.txt': ['security.txt is present (a good sign).', '', []],
+  '/robots.txt': ['robots.txt may reveal hidden paths (Disallow).', '', []],
+};
+
 async function pathExists(baseUrl, path, options = {}) {
   const u = new URL(path, baseUrl).toString();
   try {
@@ -748,7 +785,8 @@ async function pathExists(baseUrl, path, options = {}) {
   }
 }
 
-async function scanExposedFiles(targetUrl) {
+async function scanExposedFiles(targetUrl, options = {}) {
+  if (options && options.lang) i18n.setLang(options.lang);
   const findings = [];
   const base = new URL(targetUrl);
   const origin = base.origin + '/';
@@ -771,24 +809,26 @@ async function scanExposedFiles(targetUrl) {
 
     if (found) {
       const fullUrl = res.url || new URL(item.path, origin).toString();
+      const itemEn = SENSITIVE_TEXT_EN[item.path] || [item.desc, item.risk, item.fixSteps];
       findings.push(
         finding(
           item.sev,
-          'Доступен файл: ' + item.path,
-          item.desc + ' Сервер ответил HTTP 200 (' + (res.bytes || 0) + ' байт).',
+          tr('Доступен файл: ', 'Exposed file: ') + item.path,
+          tr(item.desc, itemEn[0]) + tr(' Сервер ответил HTTP 200 (', ' The server returned HTTP 200 (') + (res.bytes || 0) + tr(' байт).', ' bytes).'),
           item.sev === 'info'
             ? ''
-            : 'Закройте этот путь: удалите файл из публичной папки или запретите доступ в Nginx/Apache.',
+            : tr('Закройте этот путь: удалите файл из публичной папки или запретите доступ в Nginx/Apache.', 'Close this path: remove the file from the public directory or deny access in Nginx/Apache.'),
           {
             module: 'exposed',
             location: fullUrl,
             where:
-              'Откройте в браузере этот адрес: ' +
+              tr('Откройте в браузере этот адрес: ', 'Open this address in a browser: ') +
               fullUrl +
-              ' — если страница/файл скачивается или показывается текст, уязвимость подтверждена.',
-            evidence: 'HTTP 200, размер ответа ≈ ' + (res.bytes || 0) + ' байт',
-            risk: item.risk || '',
-            fixSteps: (item.fixSteps || []).map((s) => s.replace(/ВАШ_САЙТ/g, base.hostname)),
+              tr(' — если страница/файл скачивается или показывается текст, уязвимость подтверждена.', ' — if the page/file downloads or displays text, the vulnerability is confirmed.'),
+            evidence: tr('HTTP 200, размер ответа ≈ ', 'HTTP 200, response size ≈ ') + (res.bytes || 0) + tr(' байт', ' bytes'),
+            risk: tr(item.risk || '', itemEn[1] || ''),
+            fixSteps: (i18n.getLang() === 'en' ? (itemEn[2] || []) : (item.fixSteps || []))
+              .map((s) => s.replace(/ВАШ_САЙТ|YOUR_SITE/g, base.hostname)),
           }
         )
       );
@@ -803,19 +843,19 @@ async function scanExposedFiles(targetUrl) {
       findings.push(
         finding(
           'medium',
-          'Открыт листинг каталога /uploads/',
-          'Сервер показывает список файлов в каталоге — любой может увидеть имена загруженных файлов.',
-          'Отключите directory listing (Apache: Options -Indexes; Nginx: autoindex off).',
+          tr('Открыт листинг каталога /uploads/', 'Directory listing is enabled for /uploads/'),
+          tr('Сервер показывает список файлов в каталоге — любой может увидеть имена загруженных файлов.', 'The server displays the directory contents, so anyone can see uploaded file names.'),
+          tr('Отключите directory listing (Apache: Options -Indexes; Nginx: autoindex off).', 'Disable directory listing (Apache: Options -Indexes; Nginx: autoindex off).'),
           {
             module: 'exposed',
             location: uploadsUrl,
-            where: 'Откройте ' + uploadsUrl + ' — если видите «Index of /uploads», листинг включён.',
-            evidence: 'В HTML найдена строка «Index of /»',
-            risk: 'Утечка имён файлов, возможность скачать чужие загрузки.',
+            where: tr('Откройте ', 'Open ') + uploadsUrl + tr(' — если видите «Index of /uploads», листинг включён.', ' — if you see “Index of /uploads”, listing is enabled.'),
+            evidence: tr('В HTML найдена строка «Index of /»', 'The HTML contains “Index of /”'),
+            risk: tr('Утечка имён файлов, возможность скачать чужие загрузки.', 'File-name disclosure and the ability to download other users’ uploads.'),
             fixSteps: [
-              'В Apache добавьте Options -Indexes для этой папки.',
-              'В Nginx: autoindex off;',
-              'Проверьте, что ' + uploadsUrl + ' больше не показывает список файлов.',
+              tr('В Apache добавьте Options -Indexes для этой папки.', 'In Apache, add Options -Indexes for this directory.'),
+              tr('В Nginx: autoindex off;', 'In Nginx: autoindex off;'),
+              tr('Проверьте, что ', 'Verify that ') + uploadsUrl + tr(' больше не показывает список файлов.', ' no longer displays a file list.'),
             ],
           }
         )
@@ -827,7 +867,7 @@ async function scanExposedFiles(targetUrl) {
 
   if (!findings.length) {
     findings.push(
-      finding('info', 'Открытых чувствительных файлов не найдено', 'Проверенные типичные пути недоступны.', '')
+      finding('info', tr('Открытых чувствительных файлов не найдено', 'No exposed sensitive files found'), tr('Проверенные типичные пути недоступны.', 'The common paths checked are not accessible.'), '')
     );
   }
 
@@ -838,14 +878,15 @@ async function scanExposedFiles(targetUrl) {
 // 5. Cookie
 // ---------------------------------------------------------------------------
 
-async function scanCookies(targetUrl) {
+async function scanCookies(targetUrl, options = {}) {
+  if (options && options.lang) i18n.setLang(options.lang);
   const findings = [];
   const res = await rawRequest(targetUrl, { method: 'GET' });
   const isHttps = res.finalUrl.startsWith('https:');
 
   let setCookie = res.headers['set-cookie'];
   if (!setCookie) {
-    findings.push(finding('info', 'Cookie не устанавливаются', 'Сервер не прислал заголовок Set-Cookie.', ''));
+    findings.push(finding('info', tr('Cookie не устанавливаются', 'No cookies are set'), tr('Сервер не прислал заголовок Set-Cookie.', 'The server did not return a Set-Cookie header.'), ''));
     return { findings, meta: {} };
   }
   if (!Array.isArray(setCookie)) setCookie = [setCookie];
@@ -854,25 +895,25 @@ async function scanCookies(targetUrl) {
     const name = cookie.split('=')[0].trim();
     const lower = cookie.toLowerCase();
     const issues = [];
-    if (isHttps && !lower.includes('secure')) issues.push('нет флага Secure');
-    if (!lower.includes('httponly')) issues.push('нет флага HttpOnly (доступна из JS)');
-    if (!lower.includes('samesite')) issues.push('нет атрибута SameSite (риск CSRF)');
+    if (isHttps && !lower.includes('secure')) issues.push(tr('нет флага Secure', 'missing Secure flag'));
+    if (!lower.includes('httponly')) issues.push(tr('нет флага HttpOnly (доступна из JS)', 'missing HttpOnly flag (accessible from JS)'));
+    if (!lower.includes('samesite')) issues.push(tr('нет атрибута SameSite (риск CSRF)', 'missing SameSite attribute (CSRF risk)'));
 
     if (issues.length) {
       const hasHttpOnly = !lower.includes('httponly');
       findings.push(
         finding(
           hasHttpOnly ? 'medium' : 'low',
-          'Небезопасная cookie: ' + name,
-          'Проблемы: ' + issues.join(', ') + '.',
-          'Установите флаги Secure, HttpOnly и SameSite для cookie.'
+          tr('Небезопасная cookie: ', 'Insecure cookie: ') + name,
+          tr('Проблемы: ', 'Issues: ') + issues.join(', ') + '.',
+          tr('Установите флаги Secure, HttpOnly и SameSite для cookie.', 'Set the Secure, HttpOnly, and SameSite flags for the cookie.')
         )
       );
     }
   }
 
   if (!findings.length) {
-    findings.push(finding('info', 'Cookie защищены корректно', 'У всех cookie выставлены безопасные флаги.', ''));
+    findings.push(finding('info', tr('Cookie защищены корректно', 'Cookies are properly protected'), tr('У всех cookie выставлены безопасные флаги.', 'All cookies have secure flags set.'), ''));
   }
 
   return { findings, meta: { count: setCookie.length } };
@@ -930,7 +971,7 @@ async function scanSqlOne(targetUrl) {
     for (const pl of payloads) {
       const u = new URL(parsed.toString());
       u.searchParams.set('id', '1' + pl);
-      tests.push({ param: 'id (добавлен)', url: u.toString(), page: parsed.toString() });
+      tests.push({ param: tr('id (добавлен)', 'id (added)'), url: u.toString(), page: parsed.toString() });
     }
   }
 
@@ -951,26 +992,26 @@ async function scanSqlOne(targetUrl) {
         if (flagged.has(t.param)) return;
         flagged.add(t.param);
         const errLine = (res.body.match(/SQL syntax|mysql_|PostgreSQL|ORA-\d+|Unclosed quotation|sqlite3/i) || [
-          'ошибка БД в HTML',
+          tr('ошибка БД в HTML', 'database error in HTML'),
         ])[0];
         findings.push(
           finding(
             'critical',
-            'Возможная SQL-инъекция в параметре «' + t.param + '»',
-            'Страница: ' + t.page + '. Сервер вернул ошибку БД после спецсимволов в параметре.',
-            'Используйте prepared statements и не показывайте ошибки SQL пользователю.',
+            tr('Возможная SQL-инъекция в параметре «', 'Possible SQL injection in parameter “') + t.param + tr('»', '”'),
+            tr('Страница: ', 'Page: ') + t.page + tr('. Сервер вернул ошибку БД после спецсимволов в параметре.', '. The server returned a database error after special characters were added to the parameter.'),
+            tr('Используйте prepared statements и не показывайте ошибки SQL пользователю.', 'Use prepared statements and do not expose SQL errors to users.'),
             {
               module: 'sqli',
               param: t.param,
               location: t.url,
-              where: 'Страница «' + t.page + '», параметр «' + t.param + '». Тест: ' + t.url,
-              evidence: 'Ошибка БД: «' + String(errLine).slice(0, 80) + '»',
-              risk: 'Чтение/изменение базы данных.',
+              where: tr('Страница «', 'Page “') + t.page + tr('», параметр «', '”, parameter “') + t.param + tr('». Тест: ', '”. Test: ') + t.url,
+              evidence: tr('Ошибка БД: «', 'Database error: “') + String(errLine).slice(0, 80) + tr('»', '”'),
+              risk: tr('Чтение/изменение базы данных.', 'Reading or modifying the database.'),
               fixSteps: [
-                'Откройте страницу: ' + t.page,
-                'Найдите обработчик параметра «' + t.param + '».',
-                'Замените склейку SQL на prepared statements.',
-                'Отключите вывод ошибок БД на продакшене.',
+                tr('Откройте страницу: ', 'Open the page: ') + t.page,
+                tr('Найдите обработчик параметра «', 'Find the handler for parameter “') + t.param + tr('».', '”.'),
+                tr('Замените склейку SQL на prepared statements.', 'Replace SQL string concatenation with prepared statements.'),
+                tr('Отключите вывод ошибок БД на продакшене.', 'Disable database error output in production.'),
               ],
             }
           )
@@ -985,6 +1026,7 @@ async function scanSqlOne(targetUrl) {
 }
 
 async function scanSqlInjection(targetUrl, options = {}) {
+  if (options && options.lang) i18n.setLang(options.lang);
   const pages = collectPages(targetUrl, options).slice(0, 12);
   const findings = [];
   let tested = 0;
@@ -999,13 +1041,13 @@ async function scanSqlInjection(targetUrl, options = {}) {
     findings.push(
       finding(
         'info',
-        'Признаков SQL-инъекции не обнаружено',
-        'Проверено страниц: ' + pages.length + '. Ошибок БД после спецсимволов нет.',
+        tr('Признаков SQL-инъекции не обнаружено', 'No signs of SQL injection detected'),
+        tr('Проверено страниц: ', 'Pages checked: ') + pages.length + tr('. Ошибок БД после спецсимволов нет.', '. No database errors appeared after special characters.'),
         '',
         {
           module: 'sqli',
-          where: 'Просмотрены: ' + pages.slice(0, 5).join(' · ') + (pages.length > 5 ? ' …' : ''),
-          evidence: 'Тестов: ' + tested,
+          where: tr('Просмотрены: ', 'Reviewed: ') + pages.slice(0, 5).join(' · ') + (pages.length > 5 ? ' …' : ''),
+          evidence: tr('Тестов: ', 'Tests: ') + tested,
         }
       )
     );
@@ -1040,6 +1082,28 @@ const COMMON_PORTS = [
   { port: 27017, name: 'MongoDB', sev: 'critical', note: 'MongoDB доступна извне.' },
 ];
 
+const PORT_NOTES_EN = {
+  21: 'FTP often sends passwords in plaintext.',
+  22: 'SSH — disable password login and use keys.',
+  23: 'Telnet sends everything in plaintext.',
+  25: 'Mail server.',
+  80: 'Web port (expected).',
+  110: 'Mail port.',
+  143: 'Mail port.',
+  443: 'Web port (expected).',
+  445: 'SMB should not be exposed to the internet.',
+  1433: 'The MSSQL database is accessible externally.',
+  3306: 'The MySQL database is accessible externally — block it with a firewall.',
+  3389: 'RDP is a common brute-force target.',
+  5432: 'The PostgreSQL database is accessible externally.',
+  5900: 'The VNC remote desktop is accessible externally.',
+  6379: 'Redis often runs without a password — critical.',
+  8080: 'Alternative web port.',
+  8443: 'Alternative web port.',
+  9200: 'Unauthenticated Elasticsearch can leak data.',
+  27017: 'MongoDB is accessible externally.',
+};
+
 function checkPort(host, port, timeout = 800) {
   return new Promise((resolve) => {
     const sock = new net.Socket();
@@ -1062,13 +1126,14 @@ function checkPort(host, port, timeout = 800) {
   });
 }
 
-async function scanPorts(targetUrl) {
+async function scanPorts(targetUrl, options = {}) {
+  if (options && options.lang) i18n.setLang(options.lang);
   const findings = [];
   let host;
   try {
     host = new URL(targetUrl).hostname;
   } catch (err) {
-    return { findings: [finding('info', 'Некорректный URL', String(err), '')], meta: {} };
+    return { findings: [finding('info', tr('Некорректный URL', 'Invalid URL'), String(err), '')], meta: {} };
   }
 
   const open = [];
@@ -1078,38 +1143,39 @@ async function scanPorts(targetUrl) {
 
   for (const p of open) {
     const loc = host + ':' + p.port;
+    const portNote = tr(p.note, PORT_NOTES_EN[p.port]);
     if (p.sev === 'info') {
       findings.push(
-        finding('info', 'Открыт порт ' + p.port + ' (' + p.name + ')', p.note, '', {
+        finding('info', tr('Открыт порт ', 'Open port ') + p.port + ' (' + p.name + ')', portNote, '', {
           module: 'ports',
           location: loc,
-          where: 'Хост ' + host + ', порт ' + p.port + ' (' + p.name + ') — это нормально для сайта.',
+          where: tr('Хост ', 'Host ') + host + tr(', порт ', ', port ') + p.port + ' (' + p.name + ')' + tr(' — это нормально для сайта.', ' — this is normal for a website.'),
         })
       );
     } else {
       findings.push(
         finding(
           p.sev,
-          'Открыт порт ' + p.port + ' (' + p.name + ')',
-          p.note + ' Порт отвечает на подключения из интернета.',
-          'Закройте порт фаерволом, если он не нужен публично, или ограничьте доступ по IP.',
+          tr('Открыт порт ', 'Open port ') + p.port + ' (' + p.name + ')',
+          portNote + tr(' Порт отвечает на подключения из интернета.', ' The port accepts connections from the internet.'),
+          tr('Закройте порт фаерволом, если он не нужен публично, или ограничьте доступ по IP.', 'Block the port with a firewall if it does not need to be public, or restrict access by IP.'),
           {
             module: 'ports',
             location: loc,
             where:
-              'Смотрите на сервере/VPS: хост «' +
+              tr('Смотрите на сервере/VPS: хост «', 'Check the server/VPS: host “') +
               host +
-              '», TCP-порт ' +
+              tr('», TCP-порт ', '”, TCP port ') +
               p.port +
               ' (' +
               p.name +
-              '). Это не путь в браузере, а сетевой порт машины.',
-            evidence: 'TCP-подключение к ' + loc + ' успешно установлено',
-            risk: p.note,
+              tr('). Это не путь в браузере, а сетевой порт машины.', '). This is a machine network port, not a browser path.'),
+            evidence: tr('TCP-подключение к ', 'TCP connection to ') + loc + tr(' успешно установлено', ' succeeded'),
+            risk: portNote,
             fixSteps: [
-              'В фаерволе (ufw / security group / панель хостинга) закройте входящий порт ' + p.port + ' для 0.0.0.0/0.',
-              'Оставьте доступ только с вашего IP или через VPN, если порт нужен вам.',
-              'Для БД (3306, 5432, 27017, 6379) снаружи порт почти никогда не должен быть открыт.',
+              tr('В фаерволе (ufw / security group / панель хостинга) закройте входящий порт ', 'In the firewall (ufw / security group / hosting panel), block inbound port ') + p.port + tr(' для 0.0.0.0/0.', ' for 0.0.0.0/0.'),
+              tr('Оставьте доступ только с вашего IP или через VPN, если порт нужен вам.', 'Allow access only from your IP or through a VPN if you need the port.'),
+              tr('Для БД (3306, 5432, 27017, 6379) снаружи порт почти никогда не должен быть открыт.', 'Database ports (3306, 5432, 27017, 6379) should almost never be exposed externally.'),
             ],
           }
         )
@@ -1119,7 +1185,7 @@ async function scanPorts(targetUrl) {
 
   if (!findings.length) {
     findings.push(
-      finding('info', 'Лишних открытых портов не найдено', 'Проверенные служебные порты закрыты.', '')
+      finding('info', tr('Лишних открытых портов не найдено', 'No unnecessary open ports found'), tr('Проверенные служебные порты закрыты.', 'The checked service ports are closed.'), '')
     );
   }
 
@@ -1363,6 +1429,7 @@ function matchesAdminSignatures(body, signatures) {
 }
 
 async function scanAdmin(targetUrl, options = {}) {
+  if (options && options.lang) i18n.setLang(options.lang);
   const findings = [];
   const origin = new URL(targetUrl).origin + '/';
 
@@ -1376,9 +1443,9 @@ async function scanAdmin(targetUrl, options = {}) {
         findings.push(
           finding(
             'medium',
-            'Антибот мешает проверке админок',
-            'Сайт отдаёт JS-челлендж (ddosfilter/Cloudflare и т.п.). Сначала откройте сайт во встроенном браузере, дождитесь загрузки, затем повторите проверку.',
-            'Повторите скан после полной загрузки страницы в Brauser.'
+            tr('Антибот мешает проверке админок', 'Anti-bot protection blocks the admin check'),
+            tr('Сайт отдаёт JS-челлендж (ddosfilter/Cloudflare и т.п.). Сначала откройте сайт во встроенном браузере, дождитесь загрузки, затем повторите проверку.', 'The site returns a JavaScript challenge (ddosfilter/Cloudflare, etc.). Open it in the built-in browser, wait for it to load, then retry the check.'),
+            tr('Повторите скан после полной загрузки страницы в Brauser.', 'Retry the scan after the page fully loads in Brauser.')
           )
         );
         return { findings, meta: { checked: 0, found: 0, cms, challenge: true } };
@@ -1395,9 +1462,9 @@ async function scanAdmin(targetUrl, options = {}) {
     findings.push(
       finding(
         'medium',
-        'Антибот мешает проверке админок',
-        'Ответ на запросы — страница-челлендж, а не реальный контент. Откройте сайт в браузере Brauser и повторите проверку после загрузки.',
-        'Повторите скан после прохождения антибота во встроенном браузере.'
+        tr('Антибот мешает проверке админок', 'Anti-bot protection blocks the admin check'),
+        tr('Ответ на запросы — страница-челлендж, а не реальный контент. Откройте сайт в браузере Brauser и повторите проверку после загрузки.', 'Requests return a challenge page instead of real content. Open the site in Brauser and retry after it loads.'),
+        tr('Повторите скан после прохождения антибота во встроенном браузере.', 'Retry the scan after passing the anti-bot check in the built-in browser.')
       )
     );
     return { findings, meta: { checked: 0, found: 0, cms, challenge: true } };
@@ -1432,29 +1499,29 @@ async function scanAdmin(targetUrl, options = {}) {
     findings.push(
       finding(
         sev,
-        (f.cmsSpecific && cms ? cms + ': ' : '') + 'Доступна панель «' + f.label + '»: ' + f.path,
+        (f.cmsSpecific && cms ? cms + ': ' : '') + tr('Доступна панель «', 'Exposed panel “') + f.label + tr('»: ', '”: ') + f.path,
         'HTTP ' +
           f.status +
-          (f.authWall ? ' (закрыта авторизацией, но путь известен)' : '') +
-          (f.signed ? '. На странице обнаружена форма входа/признаки админки.' : '.') +
-          ' Публично видимая админка — цель для подбора пароля.',
-        'Ограничьте доступ по IP / VPN, включите 2FA и защиту от перебора. Для XenForo смените путь admin.php.',
+          (f.authWall ? tr(' (закрыта авторизацией, но путь известен)', ' (protected by authentication, but the path is known)') : '') +
+          (f.signed ? tr('. На странице обнаружена форма входа/признаки админки.', '. A login form or admin-panel indicators were found.') : '.') +
+          tr(' Публично видимая админка — цель для подбора пароля.', ' A publicly visible admin panel is a password-guessing target.'),
+        tr('Ограничьте доступ по IP / VPN, включите 2FA и защиту от перебора. Для XenForo смените путь admin.php.', 'Restrict access by IP/VPN, enable 2FA and brute-force protection. For XenForo, change the admin.php path.'),
         {
           module: 'admin',
           location: fullUrl,
           where:
-            'Откройте в браузере: ' +
+            tr('Откройте в браузере: ', 'Open in a browser: ') +
             fullUrl +
-            ' — если видите форму входа в админку, путь найден. Именно его нужно закрыть или усилить.',
-          evidence: 'HTTP ' + f.status + (f.signed ? ', признаки формы входа' : ''),
-          risk: 'Брутфорс пароля администратора, захват сайта.',
+            tr(' — если видите форму входа в админку, путь найден. Именно его нужно закрыть или усилить.', ' — if an admin login form appears, the path is confirmed. Restrict or harden this path.'),
+          evidence: 'HTTP ' + f.status + (f.signed ? tr(', признаки формы входа', ', login-form indicators') : ''),
+          risk: tr('Брутфорс пароля администратора, захват сайта.', 'Administrator password brute force and site takeover.'),
           fixSteps: [
-            'Сохраните этот адрес: ' + fullUrl,
-            'Ограничьте доступ к нему по IP (Nginx allow/deny или Cloudflare Access).',
-            'Включите 2FA для админов и сложный пароль.',
+            tr('Сохраните этот адрес: ', 'Save this address: ') + fullUrl,
+            tr('Ограничьте доступ к нему по IP (Nginx allow/deny или Cloudflare Access).', 'Restrict access by IP (Nginx allow/deny or Cloudflare Access).'),
+            tr('Включите 2FA для админов и сложный пароль.', 'Enable 2FA and a strong password for administrators.'),
             cms === 'XenForo'
-              ? 'В XenForo можно переименовать/сменить admin.php на нестандартный путь.'
-              : 'Смените стандартный URL админки, если CMS это позволяет.',
+              ? tr('В XenForo можно переименовать/сменить admin.php на нестандартный путь.', 'In XenForo, rename/change admin.php to a nonstandard path.')
+              : tr('Смените стандартный URL админки, если CMS это позволяет.', 'Change the default admin URL if the CMS supports it.'),
           ],
         }
       )
@@ -1465,10 +1532,10 @@ async function scanAdmin(targetUrl, options = {}) {
     findings.push(
       finding(
         'info',
-        'Открытых админ-панелей не найдено',
+        tr('Открытых админ-панелей не найдено', 'No exposed admin panels found'),
         cms
-          ? 'Проверены стандартные пути для ' + cms + ' и общие панели (phpMyAdmin и др.).'
-          : 'Проверены стандартные пути популярных CMS. Движок не определён — результат менее точен.',
+          ? tr('Проверены стандартные пути для ', 'Checked standard paths for ') + cms + tr(' и общие панели (phpMyAdmin и др.).', ' and common panels (phpMyAdmin, etc.).')
+          : tr('Проверены стандартные пути популярных CMS. Движок не определён — результат менее точен.', 'Checked standard paths for popular CMSs. The engine was not identified, so the result is less precise.'),
         ''
       )
     );
@@ -1539,6 +1606,7 @@ function detectCmsFromBody(body, headers, setCookie) {
 }
 
 async function scanFingerprint(targetUrl, options = {}) {
+  if (options && options.lang) i18n.setLang(options.lang);
   const findings = [];
   const tech = [];
   const add = (name) => {
@@ -1564,9 +1632,9 @@ async function scanFingerprint(targetUrl, options = {}) {
     findings.push(
       finding(
         'medium',
-        'Сайт закрыт антиботом (челлендж)',
-        'Сервер отдал страницу защиты (ddosfilter / Cloudflare и т.п.) вместо HTML сайта. Без прохождения челленджа нельзя надёжно определить CMS и админки.',
-        'Откройте сайт во встроенном браузере Brauser, дождитесь полной загрузки, затем снова нажмите «Движок сайта» или «Полная проверка».'
+        tr('Сайт закрыт антиботом (челлендж)', 'The site is protected by an anti-bot challenge'),
+        tr('Сервер отдал страницу защиты (ddosfilter / Cloudflare и т.п.) вместо HTML сайта. Без прохождения челленджа нельзя надёжно определить CMS и админки.', 'The server returned a protection page (ddosfilter / Cloudflare, etc.) instead of the site HTML. The CMS and admin panels cannot be identified reliably until the challenge is passed.'),
+        tr('Откройте сайт во встроенном браузере Brauser, дождитесь полной загрузки, затем снова нажмите «Движок сайта» или «Полная проверка».', 'Open the site in the built-in Brauser browser, wait for it to load fully, then click “Site engine” or “Full security check” again.')
       )
     );
     if (h['server']) add('Server: ' + h['server']);
@@ -1588,7 +1656,7 @@ async function scanFingerprint(targetUrl, options = {}) {
   if (/asp\.net_sessionid/i.test(setCookie) || h['x-aspnet-version']) add('ASP.NET');
   if (/laravel_session/i.test(setCookie)) add('Laravel (PHP)');
   if (/express/i.test(h['x-powered-by'] || '')) add('Node.js / Express');
-  if (/jsessionid/i.test(setCookie)) add('Java (сервлеты)');
+  if (/jsessionid/i.test(setCookie)) add(tr('Java (сервлеты)', 'Java (servlets)'));
 
   const { cms, version, gen } = detectCmsFromBody(body, h, setCookie);
   if (cms) add('CMS: ' + cms + (version ? ' ' + version : ''));
@@ -1596,11 +1664,11 @@ async function scanFingerprint(targetUrl, options = {}) {
   findings.push(
     finding(
       'info',
-      cms ? 'Движок сайта: ' + cms + (version ? ' ' + version : '') : 'Явный CMS не определён',
-      tech.length ? 'Обнаружено: ' + tech.join(' | ') : 'Характерных признаков движка не найдено.',
+      cms ? tr('Движок сайта: ', 'Site engine: ') + cms + (version ? ' ' + version : '') : tr('Явный CMS не определён', 'No obvious CMS detected'),
+      tech.length ? tr('Обнаружено: ', 'Detected: ') + tech.join(' | ') : tr('Характерных признаков движка не найдено.', 'No characteristic engine indicators were found.'),
       cms
-        ? 'Следите за обновлениями ' + cms + ' и плагинов — устаревшие версии имеют известные уязвимости (CVE).'
-        : 'Если страница ещё грузится или стоит антибот — откройте сайт в браузере и повторите проверку.'
+        ? tr('Следите за обновлениями ', 'Keep ') + cms + tr(' и плагинов — устаревшие версии имеют известные уязвимости (CVE).', ' and its plugins updated; outdated versions have known vulnerabilities (CVEs).')
+        : tr('Если страница ещё грузится или стоит антибот — откройте сайт в браузере и повторите проверку.', 'If the page is still loading or protected by anti-bot checks, open it in the browser and retry.')
     )
   );
 
@@ -1608,9 +1676,9 @@ async function scanFingerprint(targetUrl, options = {}) {
     findings.push(
       finding(
         'low',
-        'Версия движка раскрыта в метатеге generator',
-        '«' + gen + '». Это помогает злоумышленнику подобрать эксплойт под конкретную версию.',
-        'Уберите метатег <meta name="generator"> из разметки.'
+        tr('Версия движка раскрыта в метатеге generator', 'Engine version disclosed in the generator meta tag'),
+        tr('«', '“') + gen + tr('». Это помогает злоумышленнику подобрать эксплойт под конкретную версию.', '”. This helps attackers select an exploit for the specific version.'),
+        tr('Уберите метатег <meta name="generator"> из разметки.', 'Remove the <meta name="generator"> tag from the markup.')
       )
     );
   }
@@ -1636,44 +1704,45 @@ function computeVerdict(allFindings) {
   let level, label, advice;
   if (counts.critical > 0) {
     level = 'danger';
-    label = 'НЕ ДОВЕРЯТЬ';
-    advice = 'Обнаружены критические уязвимости. Не регистрируйтесь и не вводите личные данные.';
+    label = i18n.t('verdictBadgeDanger');
+    advice = i18n.t('verdictAdviceDanger');
   } else if (counts.high > 0) {
     level = 'warning';
-    label = 'ОПАСНО';
-    advice = 'Есть серьёзные проблемы. Регистрация рискованна — будьте осторожны.';
+    label = i18n.t('verdictBadgeWarning');
+    advice = i18n.t('verdictAdviceWarning');
   } else if (counts.medium > 0) {
     level = 'caution';
-    label = 'С ОСТОРОЖНОСТЬЮ';
-    advice = 'Критичных уязвимостей нет, но есть недочёты. Регистрация возможна с осторожностью.';
+    label = i18n.t('verdictBadgeCaution');
+    advice = i18n.t('verdictAdviceCaution');
   } else {
     level = 'safe';
-    label = 'БЕЗОПАСНО';
-    advice = 'Критичных проблем не обнаружено. Сайту можно доверять.';
+    label = i18n.t('verdictBadgeSafe');
+    advice = i18n.t('verdictAdviceSafe');
   }
 
   return { level, label, advice, score, counts };
 }
 
 async function scanAll(targetUrl, options = {}) {
+  i18n.setLang(options.lang);
   const sections = {};
   // Все модули стартуют параллельно. Админка ждёт только fingerprint (для CMS-путей).
   const fpPromise = scanFingerprint(targetUrl, options).catch((err) => ({
-    findings: [finding('info', 'Проверка не выполнена (fingerprint)', String(err), '')],
+    findings: [finding('info', tr('Проверка не выполнена (fingerprint)', 'Check failed (fingerprint)'), String(err), '')],
     meta: {},
   }));
 
   const tasks = [
     ['fingerprint', fpPromise],
-    ['tls', scanTls(targetUrl)],
-    ['headers', scanHeaders(targetUrl)],
-    ['cookies', scanCookies(targetUrl)],
+    ['tls', scanTls(targetUrl, options)],
+    ['headers', scanHeaders(targetUrl, options)],
+    ['cookies', scanCookies(targetUrl, options)],
   ];
   if (options.active !== false) {
     tasks.push(['xss', scanXss(targetUrl, options)]);
     tasks.push(['sqli', scanSqlInjection(targetUrl, options)]);
-    tasks.push(['exposed', scanExposedFiles(targetUrl)]);
-    tasks.push(['ports', scanPorts(targetUrl)]);
+    tasks.push(['exposed', scanExposedFiles(targetUrl, options)]);
+    tasks.push(['ports', scanPorts(targetUrl, options)]);
     tasks.push([
       'admin',
       fpPromise.then((fp) =>
@@ -1689,7 +1758,7 @@ async function scanAll(targetUrl, options = {}) {
       sections[key] = r.value;
     } else {
       sections[key] = {
-        findings: [finding('info', 'Проверка не выполнена (' + key + ')', String(r.reason), '')],
+        findings: [finding('info', tr('Проверка не выполнена (', 'Check failed (') + key + ')', String(r.reason), '')],
         meta: {},
       };
     }

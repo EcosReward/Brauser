@@ -1,5 +1,65 @@
 'use strict';
 
+const I18n = window.I18n;
+function t(key, vars) {
+  return I18n.t(key, vars);
+}
+function sevLabel(sev) {
+  const map = {
+    critical: t('sevCritical'),
+    high: t('sevHigh'),
+    medium: t('sevMedium'),
+    low: t('sevLow'),
+    info: t('sevInfo'),
+  };
+  return map[sev] || sev;
+}
+function applyStaticI18n() {
+  document.documentElement.lang = I18n.getLang();
+  document.querySelectorAll('[data-i18n]').forEach((el) => {
+    const key = el.getAttribute('data-i18n');
+    if (!key) return;
+    if (el.tagName === 'TITLE') {
+      document.title = t(key);
+      return;
+    }
+    el.textContent = t(key);
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-title');
+    if (key) el.title = t(key);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-placeholder');
+    if (key) el.placeholder = t(key);
+  });
+  const sel = document.getElementById('langSelect');
+  if (sel) sel.value = I18n.getLang();
+}
+function setLanguage(lang) {
+  const next = I18n.setLang(lang);
+  try {
+    localStorage.setItem('brauser.lang', next);
+  } catch (err) {
+    /* ignore */
+  }
+  applyStaticI18n();
+  tabs.forEach((tab) => {
+    tab.scanCache = null;
+  });
+  const tab = activeTab();
+  if (tab) {
+    restoreScanUiFromTab(tab);
+    viewportStatus.textContent =
+      tab.url && tab.url !== 'about:blank' ? t('tabLabel', { host: hostOf(tab.url) }) : t('newTab');
+    if (!tab.scanBusy) payloadStatus.textContent = t('readyToScan');
+  } else {
+    resetScanUi(false);
+  }
+  updateCrawlUi();
+  renderTabs();
+}
+
 const address = document.getElementById('address');
 const activeMode = document.getElementById('activeMode');
 const webviewHost = document.getElementById('webviewHost');
@@ -31,13 +91,6 @@ const liveTag = document.getElementById('liveTag');
 const crawlCount = document.getElementById('crawlCount');
 const crawlList = document.getElementById('crawlList');
 
-const SEV_LABEL = {
-  critical: 'Критич.',
-  high: 'Высокая',
-  medium: 'Средняя',
-  low: 'Низкая',
-  info: 'Инфо',
-};
 const SEV_ORDER = ['critical', 'high', 'medium', 'low', 'info'];
 const MODULE_KEYS = ['fingerprint', 'tls', 'headers', 'cookies', 'xss', 'sqli', 'ports', 'admin', 'exposed'];
 
@@ -94,17 +147,17 @@ function resetScanUi(clearCache, tab) {
   if (clearCache !== false) clearScanCache(t);
   // Не трогаем чужую вкладку на экране.
   if (t && !isTabActive(t)) return;
-  for (const key of MODULE_KEYS) setModuleState(key, 'idle', 'Не проверен');
+  for (const key of MODULE_KEYS) setModuleState(key, 'idle', t('notChecked'));
   modulesProgress.textContent = '0 / ' + MODULE_KEYS.length;
   summaryEl.innerHTML = '';
   resultsEl.innerHTML =
-    '<div class="placeholder">Результаты появятся здесь. Нажмите «Полная проверка безопасности».</div>';
+    '<div class="placeholder">' + escapeHtml(t('resultsPlaceholder')) + '</div>';
   verdictEl.className = 'verdict verdict-idle';
   verdictBadge.textContent = '—';
   verdictScoreNum.textContent = '—';
-  trustHint.textContent = 'Ожидание';
-  verdictLabel.textContent = 'Откройте сайт и нажмите «Полная проверка»';
-  verdictAdvice.textContent = 'Автопроверка отключена — анализ только по вашей кнопке.';
+  trustHint.textContent = t('waiting');
+  verdictLabel.textContent = t('openSiteAndScan');
+  verdictAdvice.textContent = t('autoScanOff');
   metricRep.textContent = '—';
   metricRep.className = 'metric-v';
   metricTls.textContent = '—';
@@ -134,7 +187,7 @@ function restoreScanUiFromTab(tab) {
   updateCrawlUi();
   if (tab.scanBusy) {
     setVerdictScanning(tab.url || tab.address || '');
-    showScanning('Проверка этой вкладки ещё идёт…');
+    showScanning(t('tabScanRunning'));
     setLive(true);
     return;
   }
@@ -153,7 +206,7 @@ function restoreScanUiFromTab(tab) {
     const all = [];
     for (const key of Object.keys(cache.sections)) all.push(...(cache.sections[key].findings || []));
     renderFindings(all);
-    verdictLabel.textContent = 'Частичные результаты — запустите полную проверку';
+    verdictLabel.textContent = t('partialResults');
     updateCrawlUi();
   }
 }
@@ -228,7 +281,7 @@ function updateCrawlUi() {
   if (pages.length > 12) {
     const more = document.createElement('div');
     more.className = 'crawl-item';
-    more.textContent = '… ещё ' + (pages.length - 12);
+    more.textContent = t('morePages', { n: pages.length - 12 });
     crawlList.appendChild(more);
   }
 }
@@ -239,7 +292,7 @@ async function harvestLinksFromPage() {
   if (!v || !tab) return;
   const origin = tab.crawlOrigin || (currentUrl() ? new URL(currentUrl()).origin : null);
   if (!origin) {
-    logLine('warn', 'Сначала откройте сайт');
+    logLine('warn', t('openSiteFirst'));
     return;
   }
   try {
@@ -274,9 +327,9 @@ async function harvestLinksFromPage() {
     });
     rememberPage(currentUrl(), tab);
     updateCrawlUi();
-    logLine('http', 'Собрано ссылок: +' + added + ' (всего ' + getCrawlPages(tab).length + ')');
+    logLine('http', t('linksCollected', { added, total: getCrawlPages(tab).length }));
   } catch (err) {
-    logLine('warn', 'Не удалось собрать ссылки: ' + (err && err.message ? err.message : err));
+    logLine('warn', t('linksFailed', { error: err && err.message ? err.message : err }));
   }
 }
 
@@ -312,11 +365,11 @@ function renderTabs() {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'tab-pill' + (tab.id === activeTabId ? ' active' : '');
-    btn.title = tab.url || 'Новая вкладка';
+    btn.title = tab.url || t('newTab');
     btn.innerHTML =
       `<span class="tab-dot${tab.url && tab.url !== 'about:blank' ? ' on' : ''}"></span>` +
-      `<span class="tab-title">${escapeHtml(tab.title || 'Новая вкладка')}</span>` +
-      `<span class="tab-close" title="Закрыть" data-close="${tab.id}">×</span>`;
+      `<span class="tab-title">${escapeHtml(tab.title || t('newTab'))}</span>` +
+      `<span class="tab-close" title="${escapeHtml(t('closeTab'))}" data-close="${tab.id}">×</span>`;
     btn.addEventListener('click', (e) => {
       if (e.target && e.target.dataset && e.target.dataset.close) {
         e.stopPropagation();
@@ -334,7 +387,7 @@ function bindWebview(tab) {
   view.addEventListener('did-start-loading', () => {
     if (tab.id !== activeTabId) return;
     loadingBar.classList.remove('hidden');
-    payloadStatus.textContent = 'Загрузка страницы…';
+    payloadStatus.textContent = t('loadingPage');
     payloadStatus.className = '';
   });
   view.addEventListener('did-stop-loading', () => {
@@ -358,8 +411,8 @@ function bindWebview(tab) {
     if (u && u !== 'about:blank') {
       address.value = u;
       updateChromeForUrl(u);
-      viewportStatus.textContent = 'DOM: ' + hostOf(u) + ' (готово)';
-      payloadStatus.textContent = 'Готов к проверкам';
+      viewportStatus.textContent = t('domReady', { host: hostOf(u) });
+      payloadStatus.textContent = t('readyToScan');
       payloadStatus.className = 'ok';
       updateCrawlUi();
     }
@@ -413,7 +466,7 @@ function createTab(initialUrl) {
 
   const tab = {
     id,
-    title: initialUrl && initialUrl !== 'about:blank' ? hostOf(initialUrl) : 'Новая вкладка',
+    title: initialUrl && initialUrl !== 'about:blank' ? hostOf(initialUrl) : t('newTab'),
     url: initialUrl || 'about:blank',
     address: initialUrl && initialUrl !== 'about:blank' ? initialUrl : '',
     scanCache: null,
@@ -439,7 +492,7 @@ function activateTab(id) {
   updateChromeForUrl(tab.url);
   restoreScanUiFromTab(tab);
   viewportStatus.textContent =
-    tab.url && tab.url !== 'about:blank' ? 'Вкладка: ' + hostOf(tab.url) : 'Новая вкладка';
+    tab.url && tab.url !== 'about:blank' ? t('tabLabel', { host: hostOf(tab.url) }) : t('newTab');
   renderTabs();
 }
 
@@ -448,7 +501,7 @@ function closeTab(id) {
     const only = tabs[0];
     only.webview.src = 'about:blank';
     only.url = 'about:blank';
-    only.title = 'Новая вкладка';
+    only.title = t('newTab');
     only.address = '';
     only.scanCache = null;
     only.scanBusy = false;
@@ -518,8 +571,8 @@ function navigate() {
   tab.title = hostOf(url);
   updateChromeForUrl(url);
   tab.webview.src = url;
-  viewportStatus.textContent = 'Загрузка: ' + hostOf(url);
-  logLine('http', 'Навигация → ' + url);
+  viewportStatus.textContent = t('loadingHost', { host: hostOf(url) });
+  logLine('http', t('navigated', { url }));
   try {
     const origin = new URL(url).origin;
     if (tab.crawlOrigin && tab.crawlOrigin !== origin) {
@@ -557,7 +610,7 @@ document.getElementById('btnCopy').addEventListener('click', async () => {
   if (!u) return;
   try {
     await navigator.clipboard.writeText(u);
-    logLine('sec', 'Адрес скопирован');
+    logLine('sec', t('addressCopied'));
   } catch (err) {
     /* ignore */
   }
@@ -565,7 +618,7 @@ document.getElementById('btnCopy').addEventListener('click', async () => {
 document.getElementById('btnNewTab').addEventListener('click', () => {
   createTab('about:blank');
   address.focus();
-  logLine('http', 'Новая вкладка');
+  logLine('http', t('newTabLog'));
 });
 
 document.addEventListener('keydown', (e) => {
@@ -618,7 +671,7 @@ async function getPageHtml() {
 async function scanOptions(extra) {
   const pageHtml = await getPageHtml();
   const pages = getCrawlPages().filter((u) => u && u !== 'about:blank');
-  return Object.assign({ pageHtml: pageHtml || undefined, pages }, extra || {});
+  return Object.assign({ pageHtml: pageHtml || undefined, pages, lang: I18n.getLang() }, extra || {});
 }
 
 // ---------------------------------------------------------------------------
@@ -661,19 +714,19 @@ function setModuleState(kind, state, meta) {
 }
 
 function summarizeModule(kind, section) {
-  if (!section || !section.findings) return { state: 'idle', meta: 'Нет данных' };
+  if (!section || !section.findings) return { state: 'idle', meta: t('notChecked') };
   const findings = section.findings;
   const worst = SEV_ORDER.find((s) => findings.some((f) => f.severity === s)) || 'info';
   const meta = section.meta || {};
-  let text = findings[0] ? findings[0].title : 'Готово';
+  let text = findings[0] ? findings[0].title : t('done');
   if (kind === 'fingerprint') text = meta.cms ? meta.cms : meta.server ? String(meta.server) : text;
   if (kind === 'tls') text = meta.protocol || text;
-  if (kind === 'ports' && meta.open != null) text = 'Открыто: ' + meta.open;
-  if (kind === 'admin' && meta.found != null) text = meta.found ? 'Найдено: ' + meta.found : 'Скрыта / не найдена';
-  if (kind === 'exposed' && meta.checked) text = findings.some((f) => f.severity !== 'info') ? text : 'Чувствительные не найдены';
+  if (kind === 'ports' && meta.open != null) text = t('openPortsN', { n: meta.open });
+  if (kind === 'admin' && meta.found != null) text = meta.found ? t('foundN', { n: meta.found }) : t('hiddenNotFound');
+  if (kind === 'exposed' && meta.checked) text = findings.some((f) => f.severity !== 'info') ? text : t('clean');
   if (kind === 'xss' || kind === 'sqli') {
     const bad = findings.filter((f) => f.severity !== 'info');
-    text = bad.length ? bad[0].title : 'Чисто';
+    text = bad.length ? bad[0].title : t('clean');
   }
   if (text.length > 42) text = text.slice(0, 40) + '…';
   const state =
@@ -702,7 +755,7 @@ function markModulesRunning(active) {
   for (const key of MODULE_KEYS) {
     const passive = ['fingerprint', 'tls', 'headers', 'cookies'].includes(key);
     if (!active && !passive) continue;
-    setModuleState(key, 'run', 'Сканирование…');
+    setModuleState(key, 'run', t('scanning'));
   }
   modulesProgress.textContent = '… / ' + MODULE_KEYS.length;
 }
@@ -718,18 +771,23 @@ function setVerdict(v, url) {
     verdictUrl.href = url;
   }
   const hints = {
-    safe: 'Отличный результат',
-    caution: 'Есть недочёты',
-    warning: 'Повышенный риск',
-    danger: 'Не доверять',
-    idle: 'Ожидание',
+    safe: t('excellent'),
+    caution: t('hasIssues'),
+    warning: t('elevatedRisk'),
+    danger: t('doNotTrustHint'),
+    idle: t('waiting'),
   };
-  trustHint.textContent = hints[v.level] || 'Готово';
+  trustHint.textContent = hints[v.level] || t('done');
   const crit = (v.counts && v.counts.critical) || 0;
   const high = (v.counts && v.counts.high) || 0;
-  metricVulns.textContent = crit + high > 0 ? crit + high + ' серьёзных' : '0 критичных';
+  metricVulns.textContent = crit + high > 0 ? t('seriousN', { n: crit + high }) : t('zeroCritical');
   metricVulns.className = 'metric-v' + (crit ? ' danger' : high ? ' warn' : '');
-  metricRep.textContent = v.score >= 85 ? v.score + '% чистая' : v.score >= 60 ? 'Средняя' : 'Низкая';
+  metricRep.textContent =
+    v.score >= 85
+      ? t('reputationClean', { score: v.score })
+      : v.score >= 60
+      ? t('reputationMedium')
+      : t('reputationLow');
   metricRep.className = 'metric-v' + (v.score >= 85 ? '' : v.score >= 60 ? ' warn' : ' danger');
 }
 
@@ -737,8 +795,8 @@ function setVerdictScanning(urlHint) {
   verdictEl.className = 'verdict verdict-idle';
   verdictBadge.textContent = '…';
   verdictScoreNum.textContent = '—';
-  trustHint.textContent = 'Анализ…';
-  verdictLabel.textContent = 'Выполняется анализ безопасности…';
+  trustHint.textContent = t('analyzing');
+  verdictLabel.textContent = t('analyzingSecurity');
   verdictAdvice.textContent = urlHint || currentUrl() || '';
 }
 
@@ -749,7 +807,7 @@ function renderSummary(counts) {
     if (!n) continue;
     const chip = document.createElement('span');
     chip.className = 'chip ' + sev;
-    chip.textContent = SEV_LABEL[sev] + ': ' + n;
+    chip.textContent = sevLabel(sev) + ': ' + n;
     summaryEl.appendChild(chip);
   }
 }
@@ -760,37 +818,37 @@ function findingNode(f) {
   const details = [];
   if (f.location) {
     details.push(
-      `<div class="finding-row"><span class="finding-k">Что закрыть / путь</span>` +
-        `<code class="finding-path" title="Скопируйте этот адрес">${escapeHtml(f.location)}</code></div>`
+      `<div class="finding-row"><span class="finding-k">${escapeHtml(t('pathToClose'))}</span>` +
+        `<code class="finding-path" title="${escapeHtml(t('clickCopy').trim())}">${escapeHtml(f.location)}</code></div>`
     );
   }
   if (f.param) {
     details.push(
-      `<div class="finding-row"><span class="finding-k">Параметр</span>` +
+      `<div class="finding-row"><span class="finding-k">${escapeHtml(t('param'))}</span>` +
         `<span class="finding-v"><code>${escapeHtml(f.param)}</code></span></div>`
     );
   }
   if (f.where) {
     details.push(
-      `<div class="finding-row"><span class="finding-k">Где искать</span>` +
+      `<div class="finding-row"><span class="finding-k">${escapeHtml(t('whereToLook'))}</span>` +
         `<span class="finding-v">${escapeHtml(f.where)}</span></div>`
     );
   }
   if (f.evidence) {
     details.push(
-      `<div class="finding-row"><span class="finding-k">Доказательство</span>` +
+      `<div class="finding-row"><span class="finding-k">${escapeHtml(t('evidence'))}</span>` +
         `<span class="finding-v">${escapeHtml(f.evidence)}</span></div>`
     );
   }
   if (f.risk) {
     details.push(
-      `<div class="finding-row risk"><span class="finding-k">Чем опасно</span>` +
+      `<div class="finding-row risk"><span class="finding-k">${escapeHtml(t('whyDangerous'))}</span>` +
         `<span class="finding-v">${escapeHtml(f.risk)}</span></div>`
     );
   }
   if (f.fixSteps && f.fixSteps.length) {
     details.push(
-      `<div class="finding-steps"><span class="finding-k">Что сделать (по шагам)</span><ol>` +
+      `<div class="finding-steps"><span class="finding-k">${escapeHtml(t('fixSteps'))}</span><ol>` +
         f.fixSteps.map((s) => `<li>${escapeHtml(s)}</li>`).join('') +
         `</ol></div>`
     );
@@ -800,7 +858,7 @@ function findingNode(f) {
   el.innerHTML = `
     <div class="finding-head">
       <span class="finding-title">${escapeHtml(f.title)}</span>
-      <span class="sev-tag ${f.severity}">${SEV_LABEL[f.severity]}</span>
+      <span class="sev-tag ${f.severity}">${sevLabel(f.severity)}</span>
     </div>
     <div class="finding-desc">${escapeHtml(f.description)}</div>
     ${box}
@@ -811,7 +869,7 @@ function findingNode(f) {
     pathEl.addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(f.location);
-        logLine('sec', 'Скопирован путь: ' + f.location);
+        logLine('sec', t('pathCopied', { path: f.location }));
       } catch (err) {
         /* ignore */
       }
@@ -834,16 +892,16 @@ function renderFindings(findings) {
     (a, b) => SEV_ORDER.indexOf(a.severity) - SEV_ORDER.indexOf(b.severity)
   );
   if (!sorted.length) {
-    resultsEl.innerHTML = '<div class="placeholder">Находок нет.</div>';
+    resultsEl.innerHTML = '<div class="placeholder">' + escapeHtml(t('noFindings')) + '</div>';
     return;
   }
   let lastSev = null;
   for (const f of sorted) {
     if (f.severity !== lastSev) {
-      const t = document.createElement('div');
-      t.className = 'group-title';
-      t.textContent = SEV_LABEL[f.severity] + ' серьёзность';
-      resultsEl.appendChild(t);
+      const group = document.createElement('div');
+      group.className = 'group-title';
+      group.textContent = t('severityGroup', { sev: sevLabel(f.severity) });
+      resultsEl.appendChild(group);
       lastSev = f.severity;
     }
     resultsEl.appendChild(findingNode(f));
@@ -867,7 +925,7 @@ function updateTlsChrome(sections, urlHint) {
   } else if (url) {
     metricTls.textContent = 'HTTP';
     metricTls.className = 'metric-v danger';
-    tlsFooter.textContent = 'HTTP без шифрования';
+    tlsFooter.textContent = t('httpNoTls');
   }
 
   const hdr = sections && sections.headers;
@@ -894,15 +952,14 @@ async function runFullScan() {
   markModulesRunning(activeMode.checked);
   const pages = getCrawlPages(tab).filter((u) => u && u !== 'about:blank');
   showScanning(
-    'Проверка вкладки ' +
-      hostOf(url) +
-      ': TLS, заголовки, cookie, движок' +
-      (activeMode.checked
-        ? ', XSS/SQL по ' + Math.min(pages.length || 1, 12) + ' стр., порты, админки, файлы'
-        : '') +
-      '…'
+    t('fullScanProgress', {
+      host: hostOf(url),
+      active: activeMode.checked
+        ? t('fullScanActivePart', { n: Math.min(pages.length || 1, 12) })
+        : '',
+    }) + '…'
   );
-  logLine('sec', '[' + hostOf(url) + '] старт полной проверки');
+  logLine('sec', t('fullScanStart', { host: hostOf(url) }));
 
   const opts = await scanOptions({ active: activeMode.checked });
   // Страницы только этой вкладки.
@@ -916,10 +973,10 @@ async function runFullScan() {
     logLine('warn', '[' + hostOf(url) + '] ' + res.error);
     if (isTabActive(tabId)) {
       setLive(false);
-      verdictLabel.textContent = 'Ошибка анализа';
+      verdictLabel.textContent = t('analysisError');
       verdictAdvice.textContent = res.error;
       resultsEl.innerHTML =
-        '<div class="placeholder">Не удалось выполнить проверку: ' + escapeHtml(res.error) + '</div>';
+        '<div class="placeholder">' + escapeHtml(t('scanFailed', { error: res.error })) + '</div>';
     }
     return;
   }
@@ -928,20 +985,20 @@ async function runFullScan() {
   if (owner) saveFullCache(owner, url, verdict, sections);
 
   if (!isTabActive(tabId)) {
-    logLine('sec', '[' + hostOf(url) + '] готово в фоне: ' + verdict.label + ' (' + verdict.score + '/100)');
+    logLine('sec', t('fullScanDoneBg', { host: hostOf(url), label: verdict.label, score: verdict.score }));
     return;
   }
 
   setLive(false);
   paintScanResult(owner, url, verdict, sections);
-  logLine('sec', '[' + hostOf(url) + '] готово: ' + verdict.label + ' (' + verdict.score + '/100)');
+  logLine('sec', t('fullScanDone', { host: hostOf(url), label: verdict.label, score: verdict.score }));
 }
 
 function labelForVerdict(v) {
-  if (v.level === 'danger') return 'Критические уязвимости найдены';
-  if (v.level === 'warning') return 'Найдены серьёзные проблемы';
-  if (v.level === 'caution') return 'Есть недочёты безопасности';
-  return 'Сайт выглядит безопасным';
+  if (v.level === 'danger') return t('verdictTitleDanger');
+  if (v.level === 'warning') return t('verdictTitleWarning');
+  if (v.level === 'caution') return t('verdictTitleCaution');
+  return t('verdictTitleSafe');
 }
 
 function showModuleResults(kind, section, fromCache, host) {
@@ -956,7 +1013,7 @@ function showModuleResults(kind, section, fromCache, host) {
   if (kind === 'tls' || kind === 'headers' || kind === 'fingerprint') {
     updateTlsChrome({ [kind]: section });
   }
-  logLine('sec', (host ? '[' + host + '] ' : '') + (fromCache ? 'Из кэша: ' : 'Модуль: ') + s.meta);
+  logLine('sec', (host ? '[' + host + '] ' : '') + (fromCache ? t('fromCache', { meta: s.meta }) : t('moduleDone', { meta: s.meta })));
 }
 
 async function runSingle(kind) {
@@ -967,15 +1024,15 @@ async function runSingle(kind) {
   if (!url) return;
   const host = hostOf(url);
   const names = {
-    headers: 'заголовков безопасности',
-    tls: 'TLS / сертификата',
-    xss: 'на отражённый XSS',
-    exposed: 'открытых файлов и каталогов',
-    cookies: 'безопасности cookie',
-    sqli: 'на SQL-инъекции',
-    ports: 'открытых портов',
-    admin: 'видимости админок и панелей входа',
-    fingerprint: 'движка сайта (CMS / технологии)',
+    headers: t('scanNameHeaders'),
+    tls: t('scanNameTls'),
+    xss: t('scanNameXss'),
+    exposed: t('scanNameExposed'),
+    cookies: t('scanNameCookies'),
+    sqli: t('scanNameSqli'),
+    ports: t('scanNamePorts'),
+    admin: t('scanNameAdmin'),
+    fingerprint: t('scanNameFingerprint'),
   };
 
   const cached = getCachedSection(url, kind, tab);
@@ -987,10 +1044,10 @@ async function runSingle(kind) {
   document.querySelectorAll('.module-card').forEach((c) => c.classList.remove('active'));
   const card = moduleCard(kind);
   if (card) card.classList.add('active');
-  setModuleState(kind, 'run', 'Сканирование…');
-  showScanning('[' + host + '] проверка ' + names[kind] + '…');
+  setModuleState(kind, 'run', t('scanning'));
+  showScanning(t('moduleCheck', { host, name: names[kind] }));
   setLive(true);
-  logLine('sec', '[' + host + '] модуль: ' + names[kind]);
+  logLine('sec', t('moduleStart', { host, name: names[kind] }));
 
   const opts = await scanOptions();
   opts.pages = getCrawlPages(tab);
@@ -1007,7 +1064,7 @@ async function runSingle(kind) {
       cookies: window.lab.scanCookies,
       ports: window.lab.scanPorts,
     };
-    res = await fnMap[kind](url);
+    res = await fnMap[kind](url, opts);
   }
 
   const owner = tabById(tabId);
@@ -1015,14 +1072,14 @@ async function runSingle(kind) {
     logLine('warn', '[' + host + '] ' + res.error);
     if (isTabActive(tabId)) {
       setLive(false);
-      setModuleState(kind, 'danger', 'Ошибка');
-      resultsEl.innerHTML = '<div class="placeholder">Ошибка: ' + escapeHtml(res.error) + '</div>';
+      setModuleState(kind, 'danger', t('error'));
+      resultsEl.innerHTML = '<div class="placeholder">' + escapeHtml(t('errorPrefix', { error: res.error })) + '</div>';
     }
     return;
   }
   if (owner) saveSectionCache(owner, url, kind, res.data);
   if (!isTabActive(tabId)) {
-    logLine('sec', '[' + host + '] модуль готов в фоне');
+    logLine('sec', t('moduleBg', { host }));
     return;
   }
   setLive(false);
@@ -1047,7 +1104,7 @@ document.getElementById('btnClearCrawl').addEventListener('click', () => {
     if (currentUrl()) rememberPage(currentUrl());
   }
   updateCrawlUi();
-  logLine('http', 'Список страниц очищен');
+  logLine('http', t('pagesCleared'));
 });
 
 verdictUrl.addEventListener('click', (e) => {
@@ -1058,5 +1115,21 @@ verdictUrl.addEventListener('click', (e) => {
   }
 });
 
-// Стартовая вкладка
+// Language + стартовая вкладка
+(function initLang() {
+  let saved = 'ru';
+  try {
+    saved = localStorage.getItem('brauser.lang') || 'ru';
+  } catch (err) {
+    saved = 'ru';
+  }
+  I18n.setLang(saved);
+  applyStaticI18n();
+  const sel = document.getElementById('langSelect');
+  if (sel) {
+    sel.value = I18n.getLang();
+    sel.addEventListener('change', () => setLanguage(sel.value));
+  }
+})();
 createTab('about:blank');
+
