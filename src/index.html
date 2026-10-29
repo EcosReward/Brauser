@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self'"
+    />
+    <title>Brauser — лаборатория безопасности</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Brand / tab strip (зона перетаскивания окна) -->
+    <header class="titlebar">
+      <div class="titlebar-left">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"></path>
+            </svg>
+          </div>
+          <span class="brand-name">Brauser</span>
+          <span class="brand-badge">LAB</span>
+        </div>
+        <div class="tabs-strip" id="tabsStrip"></div>
+        <button id="btnNewTab" class="tab-new" title="Новая вкладка" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 4v16m8-8H4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
+        </button>
+      </div>
+      <div class="titlebar-spacer" aria-hidden="true"></div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="toolbar">
+      <div class="nav-btns">
+        <button id="btnBack" class="icon-btn" title="Назад">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
+        </button>
+        <button id="btnForward" class="icon-btn" title="Вперёд">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
+        </button>
+        <button id="btnReload" class="icon-btn" title="Обновить">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
+        </button>
+      </div>
+
+      <div class="omnibox">
+        <div class="https-badge" id="httpsBadge" title="Протокол">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
+          <span id="httpsLabel">—</span>
+        </div>
+        <input id="address" type="text" placeholder="Введите адрес сайта, напр. example.com" spellcheck="false" />
+        <button id="btnCopy" class="icon-btn tiny" title="Копировать адрес">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
+        </button>
+      </div>
+
+      <button id="btnGo" class="btn-primary">
+        <span>Открыть</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 5l7 7m0 0l-7 7m7-7H3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
+      </button>
+
+      <label class="mode-toggle" title="Активные проверки отправляют тестовые запросы к сайту">
+        <input type="checkbox" id="activeMode" checked />
+        <span class="switch" aria-hidden="true"></span>
+        <span class="mode-label">Активные проверки</span>
+      </label>
+    </nav>
+
+    <!-- Security HUD / verdict -->
+    <section id="verdict" class="verdict verdict-idle">
+      <div class="verdict-glow" aria-hidden="true"></div>
+      <div class="verdict-main">
+        <div class="verdict-badge" id="verdictBadge">—</div>
+        <div class="verdict-text">
+          <div class="verdict-title-row">
+            <h2 id="verdictLabel">Откройте сайт, чтобы начать анализ</h2>
+            <a id="verdictUrl" class="verdict-url" href="#" hidden></a>
+          </div>
+          <p id="verdictAdvice" class="verdict-advice">Активные проверки отправляют тестовые запросы — используйте только на своих сайтах.</p>
+        </div>
+      </div>
+      <div class="verdict-side">
+        <div class="metric-row" id="verdictMetrics">
+          <div class="metric">
+            <div class="metric-k">Репутация</div>
+            <div class="metric-v" id="metricRep">—</div>
+          </div>
+          <div class="metric">
+            <div class="metric-k">Шифрование</div>
+            <div class="metric-v cyan" id="metricTls">—</div>
+          </div>
+          <div class="metric">
+            <div class="metric-k">Уязвимости</div>
+            <div class="metric-v" id="metricVulns">—</div>
+          </div>
+        </div>
+        <div class="score-card">
+          <div class="score-meta">
+            <span class="score-k">Индекс доверия</span>
+            <span class="score-hint" id="trustHint">Ожидание</span>
+          </div>
+          <div class="score-value">
+            <span id="verdictScoreNum">—</span><span class="score-max">/100</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <main class="layout">
+      <section class="browser-pane">
+        <div class="viewport-bar top">
+          <div class="viewport-left">
+            <span class="vdot"></span>
+            <span id="viewportStatus">Ожидание загрузки страницы…</span>
+          </div>
+          <div class="viewport-right">
+            <span id="wafBadge" class="waf-badge idle">WAF: —</span>
+          </div>
+        </div>
+        <div class="webview-wrap" id="webviewHost">
+          <div id="loadingBar" class="loading-bar hidden"></div>
+        </div>
+        <div class="viewport-bar bottom">
+          <div class="viewport-left">
+            <span>Режим: <strong>Песочница + анализ</strong></span>
+            <span class="sep">|</span>
+            <span id="payloadStatus" class="ok">Готов к проверкам</span>
+          </div>
+          <div class="viewport-right mono" id="tlsFooter">TLS —</div>
+        </div>
+      </section>
+
+      <aside class="lab-pane">
+        <div class="lab-actions">
+          <button id="scanAll" class="scan-all">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"/></svg>
+            <span>Полная проверка безопасности</span>
+          </button>
+          <div class="crawl-bar">
+            <div class="crawl-top">
+              <div class="crawl-info">
+                <span class="crawl-label">Страницы для XSS / SQL</span>
+                <strong id="crawlCount">0</strong>
+              </div>
+              <div class="crawl-btns">
+                <button type="button" id="btnHarvestLinks" class="crawl-btn" title="Собрать ссылки с текущей страницы">Собрать ссылки</button>
+                <button type="button" id="btnClearCrawl" class="crawl-btn ghost" title="Очистить список">Сброс</button>
+              </div>
+            </div>
+            <p class="crawl-hint">Погуляйте по сайту — страницы запоминаются. «Собрать ссылки» добавит меню/разделы с текущей страницы. Затем XSS и SQL проверят до 12 адресов.</p>
+            <div class="crawl-list" id="crawlList"></div>
+          </div>
+        </div>
+
+        <div class="lab-scroll">
+          <div class="modules-head">
+            <span>Модули аудита</span>
+            <span id="modulesProgress" class="modules-progress">0 / 9</span>
+          </div>
+          <div class="action-grid" id="moduleGrid">
+            <button data-scan="fingerprint" class="module-card">
+              <div class="module-top"><span>Движок сайта</span><span class="mod-dot idle" data-dot></span></div>
+              <span class="module-meta" data-meta>Не проверен</span>
+            </button>
+            <button data-scan="tls" class="module-card">
+              <div class="module-top"><span>TLS / Сертификат</span><span class="mod-dot idle" data-dot></span></div>
+              <span class="module-meta" data-meta>Не проверен</span>
+            </button>
+            <button data-scan="headers" class="module-card">
+              <div class="module-top"><span>Заголовки</span><span class="mod-dot idle" data-dot></span></div>
+              <span class="module-meta" data-meta>Не проверен</span>
+            </button>
+            <button data-scan="cookies" class="module-card">
+              <div class="module-top"><span>Cookie</span><span class="mod-dot idle" data-dot></span></div>
+              <span class="module-meta" data-meta>Не проверен</span>
+            </button>
+            <button data-scan="xss" class="module-card">
+              <div class="module-top"><span>XSS (отражённый)</span><span class="mod-dot idle" data-dot></span></div>
+              <span class="module-meta" data-meta>Не проверен</span>
+            </button>
+            <button data-scan="sqli" class="module-card">
+              <div class="module-top"><span>SQL-инъекции</span><span class="mod-dot idle" data-dot></span></div>
+              <span class="module-meta" data-meta>Не проверен</span>
+            </button>
+            <button data-scan="ports" class="module-card">
+              <div class="module-top"><span>Открытые порты</span><span class="mod-dot idle" data-dot></span></div>
+              <span class="module-meta" data-meta>Не проверен</span>
+            </button>
+            <button data-scan="admin" class="module-card">
+              <div class="module-top"><span>Админка / вход</span><span class="mod-dot idle" data-dot></span></div>
+              <span class="module-meta" data-meta>Не проверен</span>
+            </button>
+            <button data-scan="exposed" class="module-card wide-card">
+              <div class="module-top"><span>Открытые файлы</span><span class="mod-dot idle" data-dot></span></div>
+              <span class="module-meta" data-meta>Не проверен</span>
+            </button>
+          </div>
+
+          <div class="summary" id="summary"></div>
+
+          <div class="results-head">
+            <span>Находки</span>
+          </div>
+          <div class="results" id="results">
+            <div class="placeholder">Откройте сайт, затем нажмите «Полная проверка». Клик по модулю покажет уже полученные результаты из кэша.</div>
+          </div>
+
+          <div class="audit-log-wrap">
+            <div class="audit-log-head">
+              <span>Живой журнал аудита</span>
+              <span class="live-tag" id="liveTag">● IDLE</span>
+            </div>
+            <div class="audit-log" id="auditLog"></div>
+          </div>
+        </div>
+
+        <div class="lab-footer">
+          <div class="lab-footer-left">
+            <span class="engine-dot"></span>
+            <span>База правил: локальные эвристики</span>
+          </div>
+          <span class="footer-hint">Только для своих сайтов</span>
+        </div>
+      </aside>
+    </main>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>

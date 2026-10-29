@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-label="Brauser Russian banner">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#070a12"/>
+      <stop offset="55%" stop-color="#0d1424"/>
+      <stop offset="100%" stop-color="#15101a"/>
+    </linearGradient>
+    <linearGradient id="btn" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#4f46e5"/>
+    </linearGradient>
+    <linearGradient id="danger" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#fb7185"/>
+      <stop offset="100%" stop-color="#f43f5e"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <circle cx="200" cy="180" r="200" fill="#f43f5e" opacity="0.08"/>
+  <circle cx="1400" cy="720" r="260" fill="#22d3ee" opacity="0.08"/>
+
+  <text x="96" y="160" fill="#e2e8f0" font-family="Segoe UI, Arial, sans-serif" font-size="54" font-weight="800">Brauser  ;01>@0B>@8O</text>
+  <text x="96" y="230" fill="#e2e8f0" font-family="Segoe UI, Arial, sans-serif" font-size="54" font-weight="800">157>?0A=>AB8</text>
+  <text x="96" y="300" fill="#94a3b8" font-family="Segoe UI, Arial, sans-serif" font-size="28">@>25@O9B5 A09BK 4> @538AB@0F88</text>
+  <text x="96" y="350" fill="#67e8f9" font-family="Consolas, monospace" font-size="22">@>25@O9 A09B  ?>B>< 4>25@O9.</text>
+
+  <rect x="96" y="400" width="320" height="56" rx="16" fill="url(#btn)"/>
+  <text x="128" y="436" fill="#ffffff" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="700">>;=0O ?@>25@:0 157>?0A=>AB8</text>
+
+  <g font-family="Segoe UI, Arial, sans-serif" fill="#cbd5e1" font-size="18">
+    <text x="96" y="520">" XSS 8 SQL ?> ?>A5IQ==K< AB@0=8F0<</text>
+    <text x="96" y="560">" B:@KBK5 ?>@BK, 04<8=:8, .env / .sql</text>
+    <text x="96" y="600">" >=OB=K9 >BGQB: ?CBL, @8A:, GB> 70:@KBL</text>
+    <text x="96" y="640">" :;04:8 157 ?CB0=8FK >BGQB>2</text>
+  </g>
+
+  <g transform="translate(860 200)">
+    <rect width="640" height="520" rx="24" fill="#0b101e" stroke="#1e293b" stroke-width="2"/>
+    <rect x="24" y="24" width="592" height="84" rx="16" fill="#1c0b12" stroke="#9f1239"/>
+    <rect x="40" y="44" width="150" height="44" rx="12" fill="url(#danger)"/>
+    <text x="58" y="73" fill="#2a0007" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="900">  /",</text>
+    <text x="210" y="58" fill="#ffe4e6" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700">@8B8G5A:85 CO728<>AB8</text>
+    <text x="210" y="84" fill="#fda4af" font-family="Segoe UI, Arial, sans-serif" font-size="13">5 22>48B5 ;8G=K5 40==K5</text>
+    <text x="520" y="78" fill="#fb7185" font-family="Consolas, monospace" font-size="28" font-weight="800">41</text>
+    <text x="570" y="78" fill="#64748b" font-family="Consolas, monospace" font-size="14">/100</text>
+
+    <rect x="24" y="128" width="592" height="120" rx="14" fill="#11182c" stroke="#be123c"/>
+    <text x="44" y="164" fill="#fda4af" font-family="Segoe UI, Arial, sans-serif" font-size="18" font-weight="700">B:@KB ?>@B 3306 (MySQL)</text>
+    <text x="44" y="196" fill="#cbd5e1" font-family="Segoe UI, Arial, sans-serif" font-size="14">070 40==KE 4>ABC?=0 872=5</text>
+    <text x="44" y="226" fill="#67e8f9" font-family="Consolas, monospace" font-size="13">host:3306  ·  :;8: = :>?8@>20BL ?CBL</text>
+
+    <rect x="24" y="268" width="592" height="210" rx="14" fill="#090d18" stroke="#1e293b"/>
+    <text x="44" y="304" fill="#94a3b8" font-family="Consolas, monospace" font-size="12">'" !",</text>
+    <text x="44" y="340" fill="#e2e8f0" font-family="Segoe UI, Arial, sans-serif" font-size="15">1. 0:@>9B5 ?>@B D05@2>;><</text>
+    <text x="44" y="376" fill="#e2e8f0" font-family="Segoe UI, Arial, sans-serif" font-size="15">2. AB02LB5 4>ABC? B>;L:> ?> VPN/IP</text>
+    <text x="44" y="412" fill="#e2e8f0" font-family="Segoe UI, Arial, sans-serif" font-size="15">3. >2B>@8B5 ?@>25@:C 2 Brauser</text>
+    <text x="44" y="450" fill="#34d399" font-family="Consolas, monospace" font-size="13">>=OB=> 4065 =>28G:0<</text>
+  </g>
+</svg>

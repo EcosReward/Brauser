@@ -1,0 +1,14 @@
+{
+  "name": "brauser-security-lab",
+  "version": "1.0.0",
+  "description": "Браузер-лаборатория для анализа безопасности сайтов (заголовки, TLS, XSS, открытые файлы, cookie, CORS).",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.2.0"
+  }
+}
